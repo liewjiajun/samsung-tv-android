@@ -20,3 +20,7 @@ __pycache__/
 # Cloned third-party research repos (AGPL/Unlicense upstreams) — reference only.
 re/samsung-tv-root/
 re/samsung-tv-tizen-root/
+
+# Firmware images: multi-GB, licensed Samsung content, never commit
+firmware/
+extract/
