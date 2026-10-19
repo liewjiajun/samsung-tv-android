@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Find a Samsung TV on the LAN. Read-only discovery — no auth attempts, no writes.
 
-Usage: python3 discover-samsung.py [--subnet 192.168.50]
+Usage: python3 discover-samsung.py [--subnet 192.168.1]
 """
 import socket, subprocess, sys, time, concurrent.futures, json, ipaddress
 
-SUBNET = "192.168.50"
+SUBNET = "192.168.1"
 if "--subnet" in sys.argv:
     SUBNET = sys.argv[sys.argv.index("--subnet") + 1]
 

@@ -3,7 +3,7 @@
 #
 # WHY THIS EXISTS
 # ---------------
-# JJ will not test on the real TV yet (brick worry, 2026-10-19). That is the
+# We will not test on the real TV yet (brick worry, 2026-10-19). That is the
 # correct call. This lane is the substitute: an emulated 32-bit ARM Linux that
 # matches the TV's architecture, so tooling is exercised off-device.
 #

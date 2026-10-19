@@ -124,7 +124,7 @@ The two documented TVs differ materially, so results are per-model:
 
 ## Bottom line
 
-Nobody needs to run my probe on JJ's TV. The boot chain verifies, and the
+Nobody needs to run this probe on a specific TV. The boot chain verifies, and the
 mechanism is not version-specific — it is how the container is built. The
-remaining value of the toolkit is that it lets us **verify this on JJ's exact
+remaining value of the toolkit is that it lets us **verify this on a specific
 model** rather than trust anyone, mine or theirs.

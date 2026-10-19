@@ -1,6 +1,6 @@
 # Getting Android onto a Samsung Tizen TV — build plan
 
-Written 2026-10-19. Owner: JJ. Hardware: Samsung Tizen TV (model TBC).
+Written 2026-10-19. Hardware: Samsung Tizen TV (model TBC).
 Revised 2026-10-19 (same day): added tier framing and the boot-chain rule.
 
 No hardware swap. No "buy a stick." This is the software route, built as far as
@@ -20,7 +20,7 @@ Two rules govern everything below:
 >
 > **2. Prove it on the armv7 emulator, then apply it minimally on-device.**
 
-Rule 2 exists because JJ will not test on the real TV yet, on brick grounds
+Rule 2 exists because we will not test on the real TV yet, on brick grounds
 (2026-10-19) — a correct call. `vm/tvvm.sh` is the substitute: an emulated 32-bit
 ARM Linux matching the TV's architecture.
 

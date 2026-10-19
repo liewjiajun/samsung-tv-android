@@ -1,6 +1,6 @@
 # VERDICT — Can a Samsung Tizen TV be made to run Android?
 
-Project started 2026-10-19 at JJ's request. Research complete 2026-10-19.
+Project started 2026-10-19. Research complete 2026-10-19.
 Revised 2026-10-19 (same day): scoped to Tier 3 only. See "Scope" below.
 
 ## Scope — read this before the verdict
@@ -24,7 +24,7 @@ owns the display.** Android draws into a buffer and Tizen presents it — the sa
 shape as webOS homebrew and ChromeOS ARC. So Tier 3's wall is real, and it is
 narrower than it first appears.
 
-JJ raised exactly this on 2026-10-19 ("have you explored modifying tizen OS
+This framing was corrected on 2026-10-19 by the question: "have you explored modifying tizen OS
 directly instead?"). He was right to. The answer is in `ANDROID-PLAN.md`;
 risk is mapped in `BRICK-RISK.md`.
 
@@ -189,7 +189,7 @@ risk, no warranty loss, and it delivers everything "Android on the TV" was meant
 deliver — including certified Android TV, Widevine L1, 4K, and hardware decoding.
 Every finding above says this is strictly better than any software route.
 
-Nothing further is needed from JJ to close this out. The two things I previously
+Nothing further is needed to close this out. The two things I previously
 asked for (model number, TV on the network) are no longer blockers: the answer came
 from the firmware image, not the device.
 

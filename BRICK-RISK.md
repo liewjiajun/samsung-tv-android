@@ -1,6 +1,6 @@
 # BRICK RISK MAP — Samsung Tizen TV
 
-JJ's concern (2026-10-19 18:19): *"I am worried about bricking my samsung tv so i
+Owner's concern (2026-10-19 18:19): *"I am worried about bricking my samsung tv so i
 dont want to test on a real tv just yet."*
 
 This document answers the concern with evidence, not reassurance. It states
