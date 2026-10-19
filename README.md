@@ -72,7 +72,7 @@ live system (`/dev/binder`, `/proc/self/ns/*`, `/sys/fs/cgroup`), because
 | `toolkit/tizen-capability-probe.sh` | Read-only probe: which tier is open on this set | no (runs in the VM) |
 | `toolkit/tizen-debloat.py` | Disables (never uninstalls) unwanted packages | yes, Developer Mode |
 | `toolkit/sdb_native.py` | Native SDB client — pure Python, no Tizen Studio | yes, to be useful |
-| `toolkit/memfd_exec.py` | Runs an unsigned armv7 payload from memory | yes |
+| `toolkit/memfd_exec.py` | Runs a payload from memory (defeats path-based denial, not UEP) | yes |
 | `toolkit/analyze-firmware.py` | Read-only firmware container analyser | **no** |
 | `toolkit/boot-probe.sh` | Read-only boot-chain probe | yes, any shell |
 | `toolkit/mock_sdbd.py` | Fake TV speaking the real wire protocol | no |

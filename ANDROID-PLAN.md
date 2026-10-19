@@ -39,40 +39,80 @@ not the **TV**. No NTK display, no SMACK policy, no Samsung kernel in there.
 
 ---
 
-## 1. The thing that was actually blocking us, and it is now solved
+## 1. The UEP wall — and a correction
 
 Every previous attempt to put custom software on this TV died at one rail:
 
 > **UEP (Unsigned Execution Protection)** — the TV refuses to execute unsigned
-> binaries *from the filesystem*. You can obtain a shell. You cannot run your
-> own program.
+> binaries. You can obtain a shell, and even uid 0. You still cannot run your own
+> program.
 
-This was treated as a hard wall. It is not. It is a *disk-provenance* check, and
-a disk-provenance check can be defeated by never using the disk.
+### What I got wrong
 
-`toolkit/memfd_exec.py` implements and **proves** this:
+This section used to claim UEP was a *disk-provenance* check, and that
+`memfd_create` + `execveat` defeated it by never using the disk. **That claim was
+wrong**, and it was wrong in the most expensive way: it was written down here as
+the foundation for everything below.
 
-- `memfd_create()` (Linux ≥ 3.17) creates an anonymous, memory-backed file.
-- `execveat(fd, "", AT_EMPTY_PATH)` executes it without resolving any path.
-- The payload exists only in RAM. There is no file for UEP to inspect.
+The public research tested it:
 
-Verified on this machine by three-way comparison:
+> "Direct ELF loading and anonymous `fexecve` were both rejected while UEP was
+> enabled."
+> — `samsung-tv-root`, QN90F reproduction notes
 
-| case | method | result |
-|---|---|---|
-| control A | exec a binary from disk | runs |
-| **control B** | **delete it, exec by path** | **fails — the negative control** |
-| test | same bytes, anonymous memfd only | **runs** |
+So UEP does not inspect a **path**. It inspects the **file** at exec time.
+Removing the path does not remove the check.
 
-Control B is what makes the demonstration mean anything. "It ran" proves
-nothing on its own; "it runs with no on-disk path, while the same path
-deleted does not run" proves the UEP class of check is bypassed.
+Where the error came from: `re/uep-analogue-test.sh` genuinely proves memfd beats
+a **path-based** denial (a `noexec` mount). That result is true. But it is a
+different mechanism, and I let a true result about one thing stand as proof of
+another. The test was sound; the inference was not.
 
-Tizen TV kernels are **4.1.x** (confirmed: `Linux Samsung 4.1.10`), comfortably
-above the 3.17 floor, so `memfd_create` is present.
+### What actually works
 
-**This is the unlock.** Everything below depends on it and nothing below
-required it before today.
+Two real paths, both documented by the researchers on hardware they owned:
+
+**A. The signed host — works with UEP fully enabled.**
+
+Samsung ships `/usr/bin/dotnet`, signed. It will load an uploaded managed
+assembly **as data**. A signed binary is doing the loading, so there is no
+unsigned ELF for UEP to reject. P/Invoke from managed code supplies `open`,
+`mmap`, `ioctl`, `prctl` and friends.
+
+This is the bootstrap path for every payload in the public research. It requires
+no UEP patch and no kernel memory writes — therefore no crash risk from corrupting
+kernel state.
+
+Its limitation is that it runs *managed* code. It does not make an arbitrary
+native ARM binary runnable.
+
+**B. Patch the UEP state word — for true native ELF.**
+
+Samsung's own `SfdUepPacketHandler` clears a 32-bit state word when it accepts an
+authorized UEP-disable certificate. The exploit reproduces that same transition:
+validate the surrounding state, then change `1` to `0`.
+
+```
+QN90B: virtual 0xc08c26c4  physical 0x208c26c4
+QN90F: virtual 0xffffffc010b58030  physical 0x20b58030
+```
+
+It does not forge a signature or alter the verifier — it directly sets the state
+Samsung itself sets. Volatile: a reboot restores UEP.
+
+**These addresses are per-model and per-firmware.** They do not transfer. Our TV
+is a 2022 The Frame (Pontus), so both of the above are reference points only; the
+real address must be derived from our own kernel image.
+
+### Why A comes first
+
+A needs no memory corruption. B needs an arbitrary-physical-write primitive, which
+on QN90B meant an unvalidated `/dev/sdp_pqe_fdet` mmap and on QN90F meant a Mali
+use-after-free. Those are chip-specific. A is platform-independent.
+
+So the plan starts with A: managed code on a signed host, which is enough to look
+around, run tooling, and — critically — to read `/proc` and settle the binder
+question on real hardware without writing anything.
 
 ---
 
@@ -87,11 +127,8 @@ Root is not the blocker. It is a solved problem, three separate ways:
 | vendor shell exploit | chris-ritsen/samsung-tv-root, QN90B + QN90F, 42★, active Sept 2026 | current, maintained |
 
 All three end at `uid=0`. The MADBugs work is the most instructive because it
-records the *constraint* as well as the exploit:
-
-> "Samsung blocks running unsigned binaries; run it via memfd wrapper."
-
-That is the same conclusion as §1, reached independently on real hardware.
+records the *constraint* as well as the exploit: root and unsigned execution are
+separate boundaries, and root alone does not let you run your own binary.
 
 Note also: Samsung **publishes the TV kernel source tree** (the KantS2 release
 referenced throughout the MADBugs work). Real kernel headers are available,
@@ -159,12 +196,29 @@ route needs the node to be `0666` on this build — verify before assuming.
 
 Proof of step: `id` returns `uid=0`.
 
-### Step 3 — Prove unsigned execution on the TV
-Port `memfd_exec.py` as a **static ARMv7** binary (statically linked; there may
-be no matching libc on the TV), push it, run a trivial payload.
+### Step 3 — Get our own code running on the TV
 
-Proof of step: a program that is not on the TV's filesystem produces its output.
-This is the gate for everything after it.
+Use the signed .NET host. Push a managed assembly plus its runtime config as
+data, then run it through Samsung's own signed `/usr/bin/dotnet`:
+
+```
+sdb push MyTool.dll            /opt/usr/MyTool.dll
+sdb push MyTool.runtimeconfig.json /opt/usr/MyTool.runtimeconfig.json
+dotnet /opt/usr/MyTool.dll
+```
+
+Stage under `/opt`, never `/tmp` — assemblies under `/tmp` refuse to load.
+
+Proof of step: a program we wrote produces its output on the TV, with UEP still
+enabled. This is the gate for everything after it, and it needs no kernel writes
+and no UEP patch.
+
+Do **not** use `memfd_exec.py` for this. It was believed to bypass UEP by
+avoiding the filesystem; that is disproved — anonymous `fexecve` was tested and
+rejected by the researchers. UEP checks the file, not the path.
+
+Native ELF execution is a separate, later step requiring the per-firmware UEP
+state-word patch (§1B), which needs its own physical-memory primitive.
 
 ### Step 4 — Android kernel interfaces
 Android userspace needs `binder` and `ashmem`. These are **loadable modules**
@@ -234,7 +288,7 @@ projects/samsung-tv-android/
 │   ├── 03-userspace-on-rooted-kernel.md
 │   └── 04-firmware-verification.md
 └── toolkit/
-    ├── memfd_exec.py            ← the unlock. selftest + prove, both PASS
+    ├── memfd_exec.py            ← defeats PATH-based exec denial only; NOT a UEP bypass
     ├── sdb_native.py            ← pure-Python SDB client
     ├── mock_sdbd.py             ← fake TV, real protocol incl. RSA handshake
     ├── test_sdb_native.py       ← 26 assertions

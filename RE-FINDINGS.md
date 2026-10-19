@@ -73,10 +73,11 @@ own ELF. The kernel refuses.
 
 Two ways past it, both documented:
 
-**a) Don't touch disk — `memfd_create` + `execveat`.** Anonymous memory file, no
-path for the check to inspect. This is what `toolkit/memfd_exec.py` implements.
-This is why the project uses `dotnet` as a host: a *signed* binary loading a managed
-assembly as data, with P/Invoke for raw syscalls.
+**a) The signed host — this is the one that works.** Samsung's own
+`/usr/bin/dotnet` loads an uploaded managed assembly **as data** while UEP stays
+enabled. It is a signed binary doing the loading, so there is no unsigned ELF to
+check. P/Invoke supplies raw syscalls. This is the bootstrap path the public
+research uses for all their payloads.
 
 **b) Patch the UEP status word itself.** The QN90F payload does this:
 
@@ -92,6 +93,28 @@ like, so a wrong address can't silently corrupt something else.
 
 **This is the address that must be re-derived per model and per firmware.** It is
 found by scanning the kernel image for the validation pattern.
+
+#### Correction: memfd does NOT bypass UEP
+
+An earlier version of this file claimed that `memfd_create` + `execveat` bypasses
+UEP because "there is no path for the check to inspect." **That is wrong.**
+
+The researchers tested it explicitly:
+
+> "Direct ELF loading and anonymous `fexecve` were both rejected while UEP was
+> enabled."
+> — `samsung-tv-root/docs/research-notes/QN90F_REPRODUCTION.md`
+
+So UEP does not inspect a *path*. It inspects the **file contents** at exec time.
+Removing the path does not remove the check.
+
+Why the confusion happened: `re/uep-analogue-test.sh` proves that memfd defeats a
+**path-based** denial, such as a `noexec` mount. That is a true result about a
+different mechanism. It says nothing about UEP, which is content-based. The test
+was sound; the inference drawn from it was not.
+
+**Consequence:** `toolkit/memfd_exec.py` is useful for defeating *path*-based
+exec restrictions, and useless against UEP. Do not count it as a UEP bypass.
 
 ### 1.4 Getting the physical-memory primitive
 
@@ -188,7 +211,7 @@ Given the mechanics, the honest decomposition:
 | Capability | Mechanism | Confidence |
 |---|---|---|
 | Persistent writable userspace in `/opt` | already true | high |
-| Run our own native/ARM binaries | memfd + execveat, or UEP patch | high (proven publicly) |
+| Run our own native/ARM binaries | **signed dotnet host** loading a managed DLL (no UEP patch), or UEP memory patch for true native ELF | high — dotnet path is publicly proven |
 | Debian userland alongside Tizen | chroot into `/opt` after UEP disable | medium-high |
 | Replace Tizen's launcher/home UI | signed `.tpk` replaces the app surface | medium |
 | Android *apps* (APK runtime) | needs binder + a container | **the question** |
@@ -238,7 +261,7 @@ still delivers a heavily customised TV. But it kills APK support.
 |---|---|---|
 | `re/analyze-kernel.py` | kernel image → binder/container verdict + vermagic | **yes**, against a known-answer armv7 control |
 | `toolkit/tizen-capability-probe.sh` | live TV capability probe, read-only | on armv7; not on a TV |
-| `toolkit/memfd_exec.py` | run unsigned payload from memory (UEP bypass a) | self-test on host + qemu-arm |
+| `toolkit/memfd_exec.py` | run unsigned payload from memory — defeats PATH-based exec denial | self-test on host + qemu-arm; **does NOT bypass UEP** |
 | `vm/tvvm.sh` | offline armv7 lane | yes, end to end |
 
 `analyze-kernel.py --selftest` checks itself against the Debian armv7 kernel whose

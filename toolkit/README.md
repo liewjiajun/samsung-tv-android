@@ -33,7 +33,7 @@ exists. Short version: **nothing here writes to the boot chain.**
 | `analyze-firmware.py` | Read-only firmware container analyser | **no** |
 | `tizen-capability-probe.sh` | Read-only probe: decides which tier is open on *this* set | a TV (or the armv7 VM) |
 | `tizen-debloat.py` | Disables (never uninstalls) unwanted packages | a TV in Developer Mode |
-| `memfd_exec.py` | Runs an unsigned armv7 payload from memory | a TV |
+| `memfd_exec.py` | Runs a payload from memory — defeats **path-based** exec denial (noexec), **not** UEP | a TV |
 | `boot-probe.sh` | Read-only boot-chain probe, runs on the TV | a TV with any shell |
 | `mock_sdbd.py` | Fake TV speaking the real wire protocol | no |
 | `test_sdb_native.py` | 26-test suite against the mock | no |
