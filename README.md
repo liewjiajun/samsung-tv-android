@@ -141,8 +141,22 @@ armv7; that is not the same thing.
 - The exact model in scope (the probe needs it).
 - Whether the display path holds once Android is actually rendering.
 
-**Known facts from firmware analysis:** Tizen TV kernels are Linux 4.1.10 (ARM)
-with a Tizen 5.4 line on newer parts. The firmware container's AES key has not
+**Known facts from firmware analysis:** the kernel line depends on generation, and the
+numbers are not interchangeable:
+
+| generation | example | kernel | userspace |
+|---|---|---|---|
+| 2020 | Q60T | Linux 4.1.10 | ARMv7 |
+| **2022 PontusM** | QN90B, **LS03B (The Frame)** | **Linux 5.4.77** | ARMv7 |
+| 2026 Rosel / RSMF | QEF1A, QN90F | Linux 5.4.261 | AArch64 kernel, 32-bit userspace |
+
+An earlier version of this file said "Tizen TV kernels are Linux 4.1.10" flatly.
+That was wrong by three minor versions for 2022 sets and by a whole architecture
+generation for 2026 ones. It came from the oldest Q60T research and was never
+generalised. Our TV is 2022 PontusM, so **5.4.77 is the working assumption**, to be
+confirmed with `uname -r` on device.
+
+The firmware container's AES key has not
 been rotated since 2021 — a publicly known passphrase still decrypts current
 images. That looks like an open door and is not: the encryption was never the
 obstacle, the signatures are.

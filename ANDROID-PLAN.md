@@ -150,10 +150,15 @@ device nodes:
 ntkhdma, ntksys, ntkxdma
 ```
 
-That is vendor code, not mainline DRM. The kernel is `4.1.10` with a
-`dtsversion=...kants2-1G-cma` device tree and a VDFS read-only rootfs. There is
-no `panfrost`/`panthor` binding for the Mali part on this SoC in mainline, and
-no mainline driver for the NTK display path.
+That is vendor code, not mainline DRM. There is a `dtsversion=...kants2-1G-cma`
+device tree and a VDFS read-only rootfs. There is no `panfrost`/`panthor` binding
+for the Mali part on this SoC in mainline, and no mainline driver for the NTK
+display path.
+
+On the kernel version: our TV is **2022 PontusM**, so the working value is
+**Linux 5.4.77 ARMv7**, not 4.1.10. An earlier version of this file said 4.1.10;
+that came from 2020-era Q60T research and does not transfer. Confirm with
+`uname -r` before relying on it.
 
 Consequences, stated plainly:
 
@@ -223,7 +228,12 @@ state-word patch (§1B), which needs its own physical-memory primitive.
 ### Step 4 — Android kernel interfaces
 Android userspace needs `binder` and `ashmem`. These are **loadable modules**
 (`anbox/anbox-modules`, 349★) and Samsung publishes the kernel headers, so they
-can be built for `4.1.10 armv7l` out-of-tree.
+can be built out-of-tree — for **5.4.77 armv7l** if our TV is on that line.
+
+Before building anything, check `MODULE_SIG_FORCE` in the target kernel's config.
+If it is set, an unsigned out-of-tree module cannot be loaded at all, and this
+whole route is dead no matter how correct the build is. `re/analyze-kernel.py`
+answers exactly that from a kernel image, offline, with no TV involved.
 
 Proof of step: `insmod binder_linux.ko` succeeds and `/dev/binder` appears.
 
