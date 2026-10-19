@@ -37,6 +37,12 @@ struct wl_conn {
     size_t in_len;
     size_t in_cap;
 
+    /* Holds the message currently being dispatched. next_msg() must not hand the
+     * callback a pointer into `in`, because reclaiming the consumed bytes memmoves
+     * `in` down over exactly that region. */
+    uint32_t *msg;
+    size_t msg_cap;
+
     struct wl_global *globals;
     size_t n_globals;
     size_t globals_cap;
@@ -101,12 +107,17 @@ struct wl_conn *wl_connect(const char *path)
         return NULL;
     }
     c->fd = fd;
-    c->next_id = 1; /* id 1 is wl_display, implicitly allocated */
+    /* id 1 is wl_display and is reserved. Handing it out again makes the
+     * compositor treat our object as the display object, so every later request
+     * either goes to the wrong target or is misread as a protocol error. */
+    c->next_id = 2;
     return c;
 }
 
 void wl_close(struct wl_conn *c)
 {
+    if (c)
+        free(c->msg);
     if (!c)
         return;
     if (c->fd >= 0)
@@ -119,6 +130,17 @@ void wl_close(struct wl_conn *c)
 }
 
 uint32_t wl_new_id(struct wl_conn *c) { return c->next_id++; }
+
+int wl_fd(struct wl_conn *c) { return c ? c->fd : -1; }
+
+void wl_globals_reset(struct wl_conn *c)
+{
+    if (!c)
+        return;
+    for (size_t i = 0; i < c->n_globals; i++)
+        free(c->globals[i].iface);
+    c->n_globals = 0;
+}
 
 /* ---- outbound ----------------------------------------------------- */
 
@@ -230,25 +252,47 @@ static int read_more(struct wl_conn *c)
 }
 
 /* Returns 1 with a complete message, 0 if more bytes are needed, -1 on error. */
+/* Returns 1 with a complete message, 0 if more bytes are needed, -1 on error.
+ *
+ * The callback receives args pointing into c->msg, a private copy, and NOT into
+ * c->in. Handing out a pointer into c->in and then reclaiming the consumed bytes
+ * is a use-after-move: the memmove that compacts the buffer writes over the
+ * message being dispatched, so the caller reads shifted fields. That failure is
+ * silent and looks like a parsing bug in the peer.
+ *
+ * The copy is valid until the next wl_dispatch()/next_msg() call on this
+ * connection. Do not retain it, and do not dispatch recursively from a callback. */
 static int next_msg(struct wl_conn *c, uint32_t *id, uint32_t *opcode,
                     uint32_t **args, size_t *n_args)
 {
     for (;;) {
         if (c->in_len >= 8) {
-            uint32_t *w = (uint32_t *)c->in;
+            const uint32_t *w = (const uint32_t *)c->in;
             uint32_t words = w[1];
             if (words < 2)
                 return -1; /* malformed */
-            if ((size_t)words * 4 > MAX_MESSAGE_BYTES)
+            size_t bytes = (size_t)words * 4;
+            if (bytes > MAX_MESSAGE_BYTES)
                 return -1; /* larger than we will ever buffer */
-            if (c->in_len >= (size_t)words * 4) {
-                *id = w[0];
-                *opcode = w[2];
-                *args = w + 3;
-                *n_args = words - 3;
-                size_t consumed = (size_t)words * 4;
+
+            if (c->in_len >= bytes) {
+                if (words > c->msg_cap) {
+                    uint32_t *p = realloc(c->msg, bytes);
+                    if (!p)
+                        return -1;
+                    c->msg = p;
+                    c->msg_cap = words;
+                }
+                memcpy(c->msg, w, bytes);   /* copy before the buffer moves */
+
+                size_t consumed = bytes;
                 memmove(c->in, c->in + consumed, c->in_len - consumed);
                 c->in_len -= consumed;
+
+                *id = c->msg[0];
+                *opcode = c->msg[2];
+                *args = c->msg + 3;
+                *n_args = words - 3;
                 return 1;
             }
         }
