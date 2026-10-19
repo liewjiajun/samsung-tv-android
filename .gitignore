@@ -16,3 +16,7 @@ __pycache__/
 # Firmware images must never be committed: they are Samsung's copyrighted content.
 *.msd
 *.zip
+
+# Cloned third-party research repos (AGPL/Unlicense upstreams) — reference only.
+re/samsung-tv-root/
+re/samsung-tv-tizen-root/
