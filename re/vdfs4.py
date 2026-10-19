@@ -366,14 +366,83 @@ def fork_of(rec: bytes, k: dict) -> FileFork:
 
 
 def read_file(img, rec: bytes, k: dict) -> bytes:
-    """Return a file's bytes. Raises on compressed files (not yet handled)."""
+    """Return a file's bytes, decompressing when the fork is marked compressed."""
     f = fork_of(rec, k)
     if f.inline:
+        if f.compressed:
+            # inline compressed: comp_type[3], comp_size u8, then the stream
+            ctype = bytes(f.data[0:3])
+            n = f.data[3]
+            return _inflate(bytes(f.data[4:4 + n]), ctype)[:f.size]
         return f.data[:min(f.size, len(f.data))]
-    if f.compressed:
-        raise NotImplementedError('compressed file (vdfs4_comp_file_descr)')
     out = bytearray()
     for begin, length in f.extents():
         out += img.read_at(begin * img.sb.block_size,
                            length * img.sb.block_size)
+    if f.compressed:
+        # For a compressed fork size_in_bytes is the COMPRESSED length; the
+        # blob is laid out as [chunks][comp_extent table][descriptor].
+        return decompress_blob(bytes(out[:f.size]))
     return bytes(out[:f.size])
+
+
+# ---------------------------------------------------------------------------
+# Compressed files (vdfs4_comp_file_descr)
+#
+# Descriptor sits at the tail: 7 reserved, sign_type, magic[4] ("CZip" etc),
+# extents_num u16, layout_version u16, unpacked_size u64, ...
+# Chunks sit at the front; the comp_extent table is immediately before the
+# descriptor. Samsung uses an 'hZip' variant where the whole region ahead of
+# the descriptor is one stream -- the reference tool rejects those, so handle
+# them by name rather than assuming the standard table layout.
+# ---------------------------------------------------------------------------
+COMP_DESCR_LEN_06 = 40
+COMP_DESCR_LEN_05 = 32
+COMP_EXTENT_SIZE = 16
+_COMP_NAMES = (b'Zip', b'Gzp', b'Lzo', b'Zst')
+
+
+def _inflate(chunk: bytes, ctype: bytes) -> bytes:
+    if ctype == b'Zip':
+        return zlib.decompress(chunk)
+    if ctype == b'Gzp':
+        import gzip
+        return gzip.decompress(chunk)
+    raise NotImplementedError(f'compression {ctype!r} not supported')
+
+
+def _find_comp_descriptor(blob: bytes):
+    for size in (COMP_DESCR_LEN_06, COMP_DESCR_LEN_05):
+        if len(blob) >= size:
+            c = len(blob) - size
+            if blob[c + 9:c + 12] in _COMP_NAMES and u16(blob, c + 14) in (5, 6):
+                return c
+    return None
+
+
+def decompress_blob(blob: bytes) -> bytes:
+    c = _find_comp_descriptor(blob)
+    if c is None:
+        raise ValueError(f'no compression descriptor in {len(blob)}-byte blob')
+    magic = blob[c + 8:c + 12]
+    ctype = bytes(magic[1:4])
+    if magic[0:1] == b'h':
+        return _inflate(blob[:c], ctype)
+    count = u16(blob, c + 12)
+    table = c - count * COMP_EXTENT_SIZE
+    out = bytearray()
+    for i in range(count):
+        o = table + i * COMP_EXTENT_SIZE
+        if o + COMP_EXTENT_SIZE > c:
+            break
+        flags = u16(blob, o + 2)
+        ln = u32(blob, o + 4)
+        start = u64(blob, o + 8)
+        if ln == 0:
+            continue
+        chunk = blob[start:start + ln]
+        if flags & 1:          # VDFS4_CHUNK_FLAG_UNCOMPR
+            out += chunk
+        else:
+            out += _inflate(chunk, ctype)
+    return bytes(out)
