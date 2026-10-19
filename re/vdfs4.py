@@ -316,3 +316,64 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ---------------------------------------------------------------------------
+# File content reading
+#
+# A catalog FILE record is: generic key || vdfs4_catalog_folder_record (80B)
+#                        || vdfs4_fork(size 8, blocks 8, data[216]).
+# So the fork starts at 80 and its extent table at 96.
+#
+# Inline files keep their payload in fork.data. Everything else (configs,
+# binaries, the whole real rootfs) lives in extents addressed in blocks.
+# ---------------------------------------------------------------------------
+FLAG_INLINE = 1 << 19
+FLAG_COMPRESSED = 1 << 13
+COMMON_SIZE = 80
+FORK_OFF = COMMON_SIZE
+EXT_IN_FORK = 9
+IEXTENT_SIZE = 24
+
+
+class FileFork:
+    __slots__ = ('flags', 'size', 'blocks', 'data', 'inline', 'compressed')
+
+    def __init__(self, val: bytes):
+        self.flags = u32(val, 0)
+        self.size = u64(val, FORK_OFF)
+        self.blocks = u64(val, FORK_OFF + 8)
+        self.data = val[FORK_OFF + 16:FORK_OFF + 16 + 216]
+        self.inline = bool(self.flags & FLAG_INLINE)
+        self.compressed = bool(self.flags & FLAG_COMPRESSED)
+
+    def extents(self):
+        out = []
+        for i in range(EXT_IN_FORK):
+            o = i * IEXTENT_SIZE
+            if o + IEXTENT_SIZE > len(self.data):
+                break
+            begin = u64(self.data, o)
+            length = u64(self.data, o + 8)
+            if begin == 0 and length == 0:
+                continue
+            out.append((begin, length))
+        return out
+
+
+def fork_of(rec: bytes, k: dict) -> FileFork:
+    return FileFork(rec[k['key_len']:k['rec_len']])
+
+
+def read_file(img, rec: bytes, k: dict) -> bytes:
+    """Return a file's bytes. Raises on compressed files (not yet handled)."""
+    f = fork_of(rec, k)
+    if f.inline:
+        return f.data[:min(f.size, len(f.data))]
+    if f.compressed:
+        raise NotImplementedError('compressed file (vdfs4_comp_file_descr)')
+    out = bytearray()
+    for begin, length in f.extents():
+        out += img.read_at(begin * img.sb.block_size,
+                           length * img.sb.block_size)
+    return bytes(out[:f.size])
