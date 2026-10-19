@@ -1,0 +1,18 @@
+# Emulator downloads and extracted trees — `vm/tvvm.sh fetch build` recreates these.
+# They are 57 MB of third-party binaries that do not belong in git history.
+vm/vmlinuz
+vm/initrd.gz
+vm/initrd-probe.gz
+vm/irdir/
+
+# Local artifacts deliberately kept out of the published tree.
+.excluded/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Firmware images must never be committed: they are Samsung's copyrighted content.
+*.msd
+*.zip
